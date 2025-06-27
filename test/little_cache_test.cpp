@@ -57,16 +57,29 @@ int main(){
         }
     }
 
-    ITEM myItem1 = little_cache<ITEM_TYPE>::get();
-    assert(2 == myItem1->size());
-    std::cout << "got the correct used item: " << (2 == myItem1->size()) << std::endl;
-    ITEM myItem2 = little_cache<ITEM_TYPE>::get();
-    assert(1 == myItem2->size());
-    std::cout << "got the correct used item: " << (1 == myItem2->size()) << std::endl;
+    {
+        ITEM myItem1 = little_cache<ITEM_TYPE>::get();
+        assert(2 == myItem1->size());
+        std::cout << "got the correct used item: " << (2 == myItem1->size()) << std::endl;
+        ITEM myItem2 = little_cache<ITEM_TYPE>::get();
+        assert(1 == myItem2->size());
+        std::cout << "got the correct used item: " << (1 == myItem2->size()) << std::endl;
 
-    ITEM myItem3 = little_cache<ITEM_TYPE>::get();
-    assert(myItem3->empty());
-    std::cout << "got a new item: " << (myItem3->empty()) << std::endl;
+        ITEM myItem3 = little_cache<ITEM_TYPE>::get();
+        assert(myItem3->empty());
+        std::cout << "got a new item: " << (myItem3->empty()) << std::endl;
+        myItem3->emplace_back(0.0,0.0);
+    }
+
+    {
+        ITEM myItem1 = little_cache<ITEM_TYPE,1>::get();
+        assert(myItem1->empty());
+        std::cout << "got a new item from second cache: " << (myItem1->empty()) << std::endl;
+
+        ITEM myItem2 = little_cache<ITEM_TYPE>::get();
+        assert(!myItem2->empty());
+        std::cout << "got a used item from first cache: " << (!myItem2->empty()) << std::endl;
+    }
 
     return 0;
 }
