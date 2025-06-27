@@ -21,10 +21,6 @@ cmake_minimum_required(VERSION 3.20)
 set(PROJ thing)
 project(${PROJ})
 
-find_package(log4cxx REQUIRED)
-find_package(OpenCV REQUIRED)
-find_package(Boost 1.74 COMPONENTS program_options REQUIRED )
-
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_FLAGS "-FPIC -fopenmp -Wall -Wextra -Wpedantic -g -pg -O2")
 
