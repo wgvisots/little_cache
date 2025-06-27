@@ -31,6 +31,9 @@
  * return the item to this little_cache instead of actually deleting it.  That way, subsequent calls will
  * return an already-constructed item.
  *
+ * The second template parameter allows you to have multiple independent caches
+ * for the same type, without me to have to manage that.
+ *
  * NOTE1: Items returned via get() may be fully constructed, setup, and contain data.
  * NOTE2: Once items are collected via shared_ptr, they are not actually deleted.  Any data within those objects
  *        will be visible to some future call to get().  Don't leave anything sensitive in there.
@@ -47,7 +50,7 @@
  * //little_cache<ITEM_TYPE> contains one item//
  * @tparam TYPE
  */
-template<typename TYPE>
+template<typename TYPE, int X = 0>
 class little_cache{
 public:
     static_assert(std::is_default_constructible<TYPE>::value);
@@ -73,7 +76,7 @@ public:
      */
     static std::shared_ptr<TYPE> get(){
         //try to get a used item
-        TYPE* t{little_cache<TYPE>::tryGetFromCache()};
+        TYPE* t{little_cache<TYPE,X>::tryGetFromCache()};
         if(nullptr == t){
             //no used item available, make a new one
             t = new TYPE();
@@ -81,7 +84,7 @@ public:
 
         //make a deleter
         auto deleter = [](TYPE* used){
-            if(!little_cache<TYPE>::tryReturn(used)){
+            if(!little_cache<TYPE,X>::tryReturn(used)){
                 delete used;
                 used = nullptr;
             }
@@ -103,13 +106,13 @@ protected:
      * Get a singleton instance.
      * @return a pointer to the singleton little_cache<TYPE>
      */
-    static little_cache<TYPE>* getCache(){
-        static little_cache<TYPE>* ptr{nullptr};
+    static little_cache<TYPE,X>* getCache(){
+        static little_cache<TYPE,X>* ptr{nullptr};
         static std::mutex ptrLock;
         if(nullptr == ptr){
             std::lock_guard<std::mutex> lock(ptrLock);
             if(nullptr == ptr){
-                ptr = new little_cache();
+                ptr = new little_cache<TYPE,X>();
             }
         }
         return ptr;
@@ -124,7 +127,7 @@ protected:
      *         false if insertion failed, you keep that pointer
      */
     static bool tryReturn(TYPE* t){
-        little_cache<TYPE>* me = little_cache::getCache();
+        little_cache<TYPE,X>* me = little_cache::getCache();
         std::lock_guard<std::mutex> lock(me->thingsLock);
         me->things.push(t);
         return true;
@@ -136,7 +139,7 @@ protected:
      * @return
      */
     static TYPE* tryGetFromCache(){
-        little_cache<TYPE>* me = little_cache::getCache();
+        little_cache<TYPE,X>* me = little_cache::getCache();
         if(me->things.empty()){
             //fail fast and lock-less
             return nullptr;
