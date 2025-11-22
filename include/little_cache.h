@@ -42,13 +42,14 @@
  * example usage:
  * typedef std::vector<std::complex<float> > ITEM_TYPE;
  * typedef std::shared_ptr<ITEM_TYPE> ITEM;
- * //little_cache<ITEM_TYPE> is empty//
+ * <little_cache is empty>
  * {
  *    ITEM myItem = little_cache<ITEM_TYPE>::get();
- *    //little_cache<ITEM_TYPE> is empty//
+ *    <little_cache is still empty>
  * }
- * //little_cache<ITEM_TYPE> contains one item//
- * @tparam TYPE
+ * <little_cache contains one item>
+
+ * @tparam TYPE - the type of objects to be cached
  */
 template<typename TYPE, int X = 0>
 class little_cache{
