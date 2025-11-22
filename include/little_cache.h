@@ -54,7 +54,7 @@
 template<typename TYPE, int X = 0>
 class little_cache{
 public:
-    static_assert(std::is_default_constructible<TYPE>::value);
+    static_assert(std::is_default_constructible_v<TYPE>);
 
     /**
      * No copying allowed
@@ -96,12 +96,12 @@ public:
     }
 
 
-protected:
+private:
     std::stack<TYPE*> things;
     std::mutex thingsLock;
 
-    little_cache(){};
-    ~little_cache();
+    little_cache() = default;
+    ~little_cache() = default;
 
     /**
      * Get a singleton instance.
