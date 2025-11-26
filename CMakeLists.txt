@@ -24,17 +24,4 @@ project(${PROJ})
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_FLAGS "-FPIC -fopenmp -Wall -Wextra -Wpedantic -g -pg -O2")
 
-set(LIBS pthread
-         rt)
-
-#file(GLOB_RECURSE SRCS src/*.cpp)
-file(GLOB_RECURSE TEST_SRCS test/*.cpp)
-
-
-#add_library(${PROJ} ${SRCS})
-#target_include_directories(${PROJ} PUBLIC ${INC_DIRS})
-#target_link_libraries(${PROJ} ${LIBS})
-
-add_executable(${PROJ}_test ${TEST_SRCS})
-target_include_directories(${PROJ}_test PUBLIC ${INC_DIRS})
-target_link_libraries(${PROJ}_test ${LIBS})
+add_subdirectory(test)

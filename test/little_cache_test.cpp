@@ -21,65 +21,102 @@
 #include <iostream>
 #include <memory>
 #include <vector>
+
+#include "gtest/gtest.h"
+
 #include "../include/little_cache.h"
 
-/**
- * So what I'm going to do here:
- * - get an item from the cache, and make sure it is empty
- * - add two items to it
- * - get a second item from the cache, and make sure it is also empty
- * - add one item to it
- * - delete it
- * - delete the first one
- *
- * - get an item from the cache, and make sure it has only one item (the most recently deleted item
- * - get a second item from the cache, and make sure it has two items (the second most recently deleted item
- * - get a third item from the cache, and make sure it is empty
- * @return
- */
-int main(){
-    std::cout << "Testing..." << std::endl;
-    typedef std::vector<std::complex<float> > ITEM_TYPE;
-    typedef std::shared_ptr<ITEM_TYPE> ITEM;
+namespace {
+using ITEM_TYPE = std::vector<std::complex<float> >;
+using ITEM = std::shared_ptr<ITEM_TYPE>;
+}
 
+TEST(LittleCache, TestConstruct) {
+    little_cache<ITEM_TYPE>::purge();
     {
         ITEM myItem1 = little_cache<ITEM_TYPE>::get();
-        assert(0 == myItem1->size());
-        std::cout << "first is new: " << (0 == myItem1->size()) << std::endl;
-        myItem1->emplace_back(0.0,0.0);
-        myItem1->emplace_back(0.0,0.0);
+        EXPECT_NE(nullptr, myItem1.get());
+        EXPECT_EQ(0, myItem1->size());
+    }
+    little_cache<ITEM_TYPE>::purge();
+}
 
-        {
-            ITEM myItem2 = little_cache<ITEM_TYPE>::get();
-            assert(0 == myItem2->size());
-            std::cout << "second is new: " << (0 == myItem2->size()) << std::endl;
-            myItem2->emplace_back(0.0,0.0);
-        }
+TEST(LittleCache, TestMakesNewThings) {
+    little_cache<ITEM_TYPE>::purge();
+    {
+        ITEM myItem1 = little_cache<ITEM_TYPE>::get();
+        EXPECT_NE(nullptr, myItem1.get());
+        EXPECT_EQ(0, myItem1->size());
+        myItem1->emplace_back(0.0, 0.0);
+        myItem1->emplace_back(0.0, 0.0);
+
+        ITEM myItem2 = little_cache<ITEM_TYPE>::get();
+        EXPECT_NE(nullptr, myItem2.get());
+        EXPECT_EQ(0, myItem2->size());
+    }
+    little_cache<ITEM_TYPE>::purge();
+}
+
+TEST(LittleCache, TestThingsGoToRest) {
+    little_cache<ITEM_TYPE>::purge();
+    {
+        ITEM myItem1 = little_cache<ITEM_TYPE>::get();
+        ITEM myItem2 = little_cache<ITEM_TYPE>::get();
+        ITEM myItem3 = little_cache<ITEM_TYPE>::get();
+    }
+    ASSERT_EQ(3, little_cache<ITEM_TYPE>::numCachedItems());
+    little_cache<ITEM_TYPE>::purge();
+}
+
+TEST(LittleCache, TestMultipleCaches) {
+    little_cache<ITEM_TYPE,0>::purge();
+    little_cache<ITEM_TYPE,1>::purge();
+    {
+        ITEM myItem0_1 = little_cache<ITEM_TYPE, 0>::get();
+        ITEM myItem0_2 = little_cache<ITEM_TYPE, 0>::get();
+        ITEM myItem0_3 = little_cache<ITEM_TYPE, 0>::get();
+        myItem0_1->emplace_back(0.0, 0.0);
+        myItem0_2->emplace_back(0.0, 0.0);
+        myItem0_3->emplace_back(0.0, 0.0);
+
+        ITEM myItem1_1 = little_cache<ITEM_TYPE, 1>::get();
+        ITEM myItem1_2 = little_cache<ITEM_TYPE, 1>::get();
+        myItem1_1->emplace_back(0.0, 0.0);
+        myItem1_1->emplace_back(0.0, 0.0);
+        myItem1_2->emplace_back(0.0, 0.0);
+        myItem1_2->emplace_back(0.0, 0.0);
+    }
+    const std::size_t num0 = little_cache<ITEM_TYPE, 0>::numCachedItems();
+    const std::size_t num1 = little_cache<ITEM_TYPE, 1>::numCachedItems();
+    ASSERT_EQ(3, num0);
+    ASSERT_EQ(2, num1);
+    little_cache<ITEM_TYPE,0>::purge();
+    little_cache<ITEM_TYPE,1>::purge();
+}
+
+TEST(LittleCache, TestThingsComeBack) {
+    little_cache<ITEM_TYPE>::purge();
+    //Make two things, put stuff in them, and then allow them to be collected.
+    {
+        ITEM myItem1 = little_cache<ITEM_TYPE>::get();
+        myItem1->emplace_back(0.0, 0.0);
+        myItem1->emplace_back(0.0, 0.0);
+        ITEM myItem2 = little_cache<ITEM_TYPE>::get();
+        myItem2->emplace_back(0.0, 0.0);
     }
 
+    //now test and see if we get those thigns back
     {
         ITEM myItem1 = little_cache<ITEM_TYPE>::get();
-        assert(2 == myItem1->size());
-        std::cout << "got the correct used item: " << (2 == myItem1->size()) << std::endl;
+        ASSERT_EQ(2, myItem1->size());
         ITEM myItem2 = little_cache<ITEM_TYPE>::get();
-        assert(1 == myItem2->size());
-        std::cout << "got the correct used item: " << (1 == myItem2->size()) << std::endl;
+        ASSERT_EQ(1, myItem2->size());
 
         ITEM myItem3 = little_cache<ITEM_TYPE>::get();
-        assert(myItem3->empty());
-        std::cout << "got a new item: " << (myItem3->empty()) << std::endl;
-        myItem3->emplace_back(0.0,0.0);
+        ASSERT_TRUE(myItem3->empty());
+        myItem3->emplace_back(0.0, 0.0);
     }
-
-    {
-        ITEM myItem1 = little_cache<ITEM_TYPE,1>::get();
-        assert(myItem1->empty());
-        std::cout << "got a new item from second cache: " << (myItem1->empty()) << std::endl;
-
-        ITEM myItem2 = little_cache<ITEM_TYPE>::get();
-        assert(!myItem2->empty());
-        std::cout << "got a used item from first cache: " << (!myItem2->empty()) << std::endl;
-    }
-
-    return 0;
+    little_cache<ITEM_TYPE>::purge();
 }
+
+

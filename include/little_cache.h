@@ -22,7 +22,6 @@
 #include <mutex>
 #include <stack>
 #include <type_traits>
-#include <vector>
 
 
 /**
@@ -95,6 +94,29 @@ public:
         return std::shared_ptr<TYPE>(t, deleter);
     }
 
+    /**
+     * Destruct everything in the cache.  This has no effect on things produced by this cache that have not yet been
+     * cleaned up.  In other words, things may appear in this cache unexpectedly after purging.
+     */
+    static void purge() {
+        little_cache<TYPE, X> *me = little_cache<TYPE,X>::getCache();
+        assert(nullptr != me);
+        std::lock_guard<std::mutex> lock(me->thingsLock);
+        while (!me->things.empty()) {
+            me->things.pop();
+        }
+    }
+
+    /**
+     * This is a diagnostic function which returns the number of items in the cache awaiting use.  This does not
+     * count the number of items currently in flight.
+     * @return the number of items at rest awaiting use
+     */
+    static std::size_t numCachedItems() {
+        little_cache<TYPE, X> *me = little_cache<TYPE,X>::getCache();
+        std::lock_guard<std::mutex> lock(me->thingsLock);
+        return me->things.size();
+    }
 
 private:
     std::stack<TYPE*> things;
@@ -123,15 +145,21 @@ private:
      * Try to put an item back into the cache.
      * NOTE: If this returns false, you, the caller, are still the owner of the pointer.
      *
+     * TODO -> make the size limited something better
+     *
      * @param t - the pointer you wish to return
      * @return true if successfully cached, the pointer is mine and you can't have it back
      *         false if insertion failed, you keep that pointer
      */
     static bool tryReturn(TYPE* t){
+        static constexpr std::size_t LIMIT{1024};
         little_cache<TYPE,X>* me = little_cache::getCache();
         std::lock_guard<std::mutex> lock(me->thingsLock);
-        me->things.push(t);
-        return true;
+        if (me->things.size() < LIMIT) {
+            me->things.push(t);
+            return true;
+        }
+        return false;
     }
 
     /**
