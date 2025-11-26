@@ -48,6 +48,6 @@ target_link_libraries(runUnitTests ${LIBS})
 
 # Link test executable against gtest & gtest_main
 target_link_libraries(runUnitTests gtest gtest_main)
-add_test( runUnitTests runUnitTests )
+add_test(runUnitTests runUnitTests )
 
 

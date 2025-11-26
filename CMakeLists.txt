@@ -24,4 +24,6 @@ project(${PROJ})
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_FLAGS "-FPIC -fopenmp -Wall -Wextra -Wpedantic -g -pg -O2")
 
+enable_testing()
+
 add_subdirectory(test)
