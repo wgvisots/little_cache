@@ -136,6 +136,7 @@ private:
             std::lock_guard<std::mutex> lock(ptrLock);
             if(nullptr == ptr){
                 ptr = new little_cache<TYPE,X>();
+                assert(nullptr != ptr);
             }
         }
         return ptr;

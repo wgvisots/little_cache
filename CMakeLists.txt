@@ -22,7 +22,8 @@ set(PROJ thing)
 project(${PROJ})
 
 set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_FLAGS "-FPIC -fopenmp -Wall -Wextra -Wpedantic -g -pg -O2")
+#use -fanalyzer in the future
+set(CMAKE_CXX_FLAGS "-FPIC -fopenmp -Wall -Wextra -Wpedantic -g -pg -O2 --coverage")
 
 enable_testing()
 
