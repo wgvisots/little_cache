@@ -28,3 +28,26 @@ set(CMAKE_CXX_FLAGS "-FPIC -fopenmp -Wall -Wextra -Wpedantic -g -pg -O2 --covera
 enable_testing()
 
 add_subdirectory(test)
+
+include(CMakePackageConfigHelpers)
+write_basic_package_version_file(
+    little_cache.cmake
+    VERSION 1.0.0
+    COMPATIBILITY AnyNewerVersion
+    )
+
+install(FILES ${CMAKE_SOURCE_DIR}/include/little_cache.h DESTINATION "include/little_cache")
+
+set(CPACK_GENERATOR "DEB" "TGZ")
+set(CPACK_PACKAGE_NAME "little_cache")
+set(CPACK_PACKAGE_VENDOR "NMERC")
+set(CPACK_PACKAGE_CONTACT "Greg Visotski")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Header-only simple cache library.")
+set(CPACK_PACKAGE_VERSION_MAJOR 1)
+set(CPACK_PACKAGE_VERSION_MINOR 0)
+set(CPACK_PACKAGE_VERSION_PATCH 0)
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+set(CPACK_RESOURCE_FILE_README "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
+set(CPACK_PACKAGING_INSTALL_PREFIX /usr/)
+set(CPACK_PACKAGE_FILE_NAME ${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}.${CMAKE_SYSTEM_PROCESSOR})
+include(CPack)
