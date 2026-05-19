@@ -49,6 +49,7 @@
  * <little_cache contains one item>
 
  * @tparam TYPE - the type of objects to be cached
+ * @tparam X    - optional cache identifier - so you can have multiple independent caches of the same type
  */
 template<typename TYPE, int X = 0>
 class little_cache{
