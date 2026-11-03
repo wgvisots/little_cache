@@ -1,6 +1,4 @@
-# This starter workflow is for a CMake project running on a single platform. There is a different starter workflow if you need cross-platform coverage.
-# See: https://github.com/actions/starter-workflows/blob/main/ci/cmake-multi-platform.yml
-name: CMake on a single platform
+name: CI
 
 on:
   push:
@@ -8,36 +6,62 @@ on:
   pull_request:
     branches: [ "main" ]
 
-env:
-  # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
-  BUILD_TYPE: Release
+permissions:
+  contents: read
 
 jobs:
-  build:
-    # The CMake configure and build commands are platform agnostic and should work equally well on Windows or Mac.
-    # You can convert this to a matrix build if you need cross-platform coverage.
-    # See: https://docs.github.com/en/free-pro-team@latest/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
-    runs-on: ubuntu-latest
+  test:
+    name: test (${{ matrix.name }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: plain
+            sanitizer: ""
+          - name: address+undefined
+            sanitizer: "address,undefined"
+          - name: thread
+            sanitizer: "thread"
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-    - name: Install Dependencies
-      run: sudo apt install -y libgtest-dev
-    - name: Configure CMake
-      # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
-      # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      #run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
-      run: cmake -B ${{github.workspace}}/build
+    - name: Install dependencies
+      run: sudo apt-get update && sudo apt-get install -y libgtest-dev
+
+    - name: Configure
+      run: cmake -B build -DLITTLE_CACHE_SANITIZER="${{ matrix.sanitizer }}"
 
     - name: Build
-      working-directory: ${{github.workspace}}/build
-      run: make -j
+      run: cmake --build build -j
 
     - name: Test
-      working-directory: ${{github.workspace}}/build
-      # Execute tests defined by the CMake configuration.
-      # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
-      #run: ctest -C ${{env.BUILD_TYPE}}
-      run: ctest 
+      # ThreadSanitizer can't map its shadow memory with the runner kernel's address randomisation, so it runs
+      # with randomisation turned off for the test process.
+      run: |
+        if [ "${{ matrix.sanitizer }}" = "thread" ]; then
+          setarch "$(uname -m)" -R ./build/test/runUnitTests
+        else
+          ctest --test-dir build --output-on-failure
+        fi
 
+  package:
+    name: package and downstream use
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+    - name: Install and use with find_package
+      run: |
+        cmake -B build -DLITTLE_CACHE_BUILD_TESTS=OFF
+        cmake --install build --prefix "$RUNNER_TEMP/prefix"
+        mkdir consumer
+        printf '%s\n' 'cmake_minimum_required(VERSION 3.20)' 'project(consumer CXX)' \
+                      'find_package(little_cache 1.1 REQUIRED)' 'add_executable(consumer main.cpp)' \
+                      'target_link_libraries(consumer PRIVATE little_cache::little_cache)' > consumer/CMakeLists.txt
+        printf '%s\n' '#include <vector>' '#include <little_cache/little_cache.h>' \
+                      'int main() { return little_cache<std::vector<char>>::get() ? 0 : 1; }' > consumer/main.cpp
+        cmake -S consumer -B consumer/build -DCMAKE_PREFIX_PATH="$RUNNER_TEMP/prefix"
+        cmake --build consumer/build
+        ./consumer/build/consumer
