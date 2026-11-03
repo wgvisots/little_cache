@@ -47,39 +47,37 @@ struct little_cache_clear{
 
 
 /**
- * This is a simple auto-recycler of things.  If you ask the little_cache to construct something for you, it
- * will provide you a shared_ptr to that thing.  The shared pointer has a deleter that will automatically
- * return the item to this little_cache instead of actually deleting it.  That way, subsequent calls will
- * return an already-constructed item.
+ * A simple recycler for objects that are expensive to construct.  get() hands you a std::shared_ptr to an object.
+ * When the last copy of that shared_ptr goes away, the object is put back in this cache instead of being deleted,
+ * and a later get() hands it out again.
  *
- * The second template parameter allows you to have multiple independent caches
- * for the same type, without me to have to manage that.
- *
- * NOTE1: Items returned via get() may be fully constructed, setup, and contain data.
- * NOTE2: Once items are collected via shared_ptr, they are not actually deleted.  Any data within those objects
- *        will be visible to some future call to get().  Don't leave anything sensitive in there.
- * NOTE3: There will only be one instance of this cache per type!  It is singleton, per template type.
+ * NOTE1: An object from get() may be brand new, or may be one that was used before and still holds its old data.
+ * NOTE2: Recycled objects are not wiped unless a reset policy does it (see NOTE5).  Whatever you leave in an object
+ *        will be visible to the next caller of get().  Don't leave anything sensitive in there.
+ * NOTE3: There is one cache per combination of TYPE, ID and RESET.  Use different IDs for independent caches of the
+ *        same type.
  * NOTE4: All functions are safe to call from any number of threads at once.
- * NOTE5: The third template parameter is a reset policy, called on every item as it is returned to the cache (and
- *        before it is deleted, if the cache is full).  little_cache_keep (the default) leaves items as they were;
- *        little_cache_clear calls clear() on them.  Your own policy is any default-constructible type with a
- *        noexcept "void operator()(TYPE&) const".  Caches with different policies are independent caches.
+ * NOTE5: RESET is called on every object as it is returned to the cache (and before it is deleted, if the cache is
+ *        full).  little_cache_keep (the default) leaves objects as they were; little_cache_clear calls clear() on
+ *        them.  Your own policy is any default-constructible type with a noexcept "void operator()(TYPE&) const".
+ * NOTE6: The cache and the objects at rest in it are never destroyed, even at program exit, so that a shared_ptr
+ *        released during static destruction can still return its object safely.  Leak checkers report them as
+ *        "still reachable", not as leaks.  Call purge() to free them earlier.
  *
- * example usage:
- * typedef std::vector<std::complex<float> > ITEM_TYPE;
- * typedef std::shared_ptr<ITEM_TYPE> ITEM;
- * <little_cache is empty>
- * {
- *    ITEM myItem = little_cache<ITEM_TYPE>::get();
- *    <little_cache is still empty>
- * }
- * <little_cache contains one item>
-
+ * Example:
+ *     {
+ *         std::shared_ptr<std::vector<char> > buffer = little_cache<std::vector<char> >::get(); // new: cache empty
+ *         buffer->resize(1000);
+ *     }   // the vector goes back into the cache
+ *     {
+ *         std::shared_ptr<std::vector<char> > buffer = little_cache<std::vector<char> >::get(); // the same vector,
+ *     }                                                                                         // still 1000 long
+ *
  * @tparam TYPE  - the type of objects to be cached
- * @tparam X     - optional cache identifier - so you can have multiple independent caches of the same type
- * @tparam RESET - optional reset policy, applied to items as they are returned (see NOTE5)
+ * @tparam ID    - optional cache identifier, so you can have multiple independent caches of the same type
+ * @tparam RESET - optional reset policy, applied to objects as they are returned (see NOTE5)
  */
-template<typename TYPE, int X = 0, typename RESET = little_cache_keep>
+template<typename TYPE, int ID = 0, typename RESET = little_cache_keep>
 class little_cache{
 public:
     static_assert(std::is_default_constructible_v<TYPE>,  "little_cache needs to be able to construct new items");
@@ -102,22 +100,21 @@ public:
     /**
      * No copying allowed
      */
-    const little_cache& operator=(const little_cache&) = delete;
+    little_cache& operator=(const little_cache&) = delete;
 
     /**
-     * Get an item from the cache if there is one available, or construct one if not.  These
-     * items will automatically be returned to the cache when std::shared_ptr decides to garbage
-     * collect it.
+     * Get an object from the cache if there is one available, or construct one if not.  It goes back into the cache
+     * when the last copy of the returned shared_ptr is destroyed.
      *
-     * Items returned may be brand new, or may be used.  It is your responsibility to properly configure
-     * the item when you get it, and remove private stuff before it is allowed to be recycled.
+     * Objects returned may be brand new, or may be used.  It is your responsibility to set the object up when you get
+     * it, and to remove anything private before it is recycled (or to use a reset policy that does).
      *
      * @return std::shared_ptr<TYPE> - an item for you to use - it may be new or used
      * @throws whatever TYPE's default constructor throws, or std::bad_alloc
      */
     static std::shared_ptr<TYPE> get(){
         //try to get a used item
-        TYPE* t{little_cache<TYPE,X,RESET>::tryGetFromCache()};
+        TYPE* t{little_cache<TYPE,ID,RESET>::tryGetFromCache()};
         if(nullptr == t){
             //no used item available, make a new one
             t = new TYPE();
@@ -131,7 +128,7 @@ public:
 
             bool returned{false};
             try {
-                returned = little_cache<TYPE,X,RESET>::tryReturn(used);
+                returned = little_cache<TYPE,ID,RESET>::tryReturn(used);
             } catch (...) {
                 returned = false;
             }
@@ -149,7 +146,7 @@ public:
      * cleaned up.  In other words, things may appear in this cache unexpectedly after purging.
      */
     static void purge() {
-        little_cache<TYPE,X,RESET>* me = little_cache<TYPE,X,RESET>::getCache();
+        little_cache<TYPE,ID,RESET>* me = little_cache<TYPE,ID,RESET>::getCache();
         std::stack<TYPE*>      doomed;
         {
             std::lock_guard<std::mutex> lock(me->thingsLock);
@@ -168,7 +165,7 @@ public:
      * @return the number of items at rest awaiting use
      */
     static std::size_t numCachedItems() {
-        little_cache<TYPE,X,RESET>* me = little_cache<TYPE,X,RESET>::getCache();
+        little_cache<TYPE,ID,RESET>* me = little_cache<TYPE,ID,RESET>::getCache();
         std::lock_guard<std::mutex> lock(me->thingsLock);
         return me->things.size();
     }
@@ -184,10 +181,10 @@ private:
      * Get the singleton instance.  It is created on first use (thread-safe, as for any function-local static) and is
      * deliberately never destroyed: a shared_ptr released during static destruction, after this cache would
      * otherwise have been destroyed, can still return its item safely.
-     * @return a pointer to the singleton little_cache<TYPE,X,RESET>
+     * @return a pointer to the singleton little_cache<TYPE,ID,RESET>
      */
-    static little_cache<TYPE,X,RESET>* getCache(){
-        static little_cache<TYPE,X,RESET>* const instance{new little_cache<TYPE,X,RESET>()};
+    static little_cache<TYPE,ID,RESET>* getCache(){
+        static little_cache<TYPE,ID,RESET>* const instance{new little_cache<TYPE,ID,RESET>()};
         return instance;
     }
 
@@ -200,7 +197,7 @@ private:
      *         false if insertion failed, you keep that pointer
      */
     static bool tryReturn(TYPE* t){
-        little_cache<TYPE,X,RESET>* me = little_cache::getCache();
+        little_cache<TYPE,ID,RESET>* me = little_cache::getCache();
         std::lock_guard<std::mutex> lock(me->thingsLock);
         if (me->things.size() < MAX_CACHED_ITEMS) {
             me->things.push(t);
@@ -214,7 +211,7 @@ private:
      * @return a used item, or nullptr
      */
     static TYPE* tryGetFromCache(){
-        little_cache<TYPE,X,RESET>* me = little_cache::getCache();
+        little_cache<TYPE,ID,RESET>* me = little_cache::getCache();
         //always take the lock: checking empty() without it races with other threads pushing and popping
         std::lock_guard<std::mutex> lock(me->thingsLock);
         if(me->things.empty()){
