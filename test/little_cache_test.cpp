@@ -28,7 +28,7 @@
 
 #include "gtest/gtest.h"
 
-#include "../include/little_cache.h"
+#include <little_cache/little_cache.h>
 
 namespace {
 using ITEM_TYPE = std::vector<std::complex<float> >;

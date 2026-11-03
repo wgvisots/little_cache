@@ -16,38 +16,25 @@
 # limitations under the License.
 ###########################################################################
 
-cmake_minimum_required(VERSION 3.20)
+find_package(GTest   REQUIRED)
+find_package(Threads REQUIRED)
 
-set(PROJ little_cache_test)
-project(${PROJ})
+add_executable(runUnitTests little_cache_test.cpp)
 
-find_package(GTest REQUIRED)
+target_compile_options(runUnitTests PRIVATE -Wall -Wextra -Wpedantic -Werror -g)
+target_link_libraries (runUnitTests PRIVATE little_cache::little_cache
+                                            GTest::gtest
+                                            GTest::gtest_main
+                                            Threads::Threads)
 
-set(INC_DIRS "../include"
-             ${gtest_INCLUDE_DIR})
+if(LITTLE_CACHE_COVERAGE)
+    target_compile_options(runUnitTests PRIVATE --coverage -O0)
+    target_link_options   (runUnitTests PRIVATE --coverage)
+endif()
 
-set(LIBS pthread
-         rt)
+if(LITTLE_CACHE_SANITIZER)
+    target_compile_options(runUnitTests PRIVATE -fsanitize=${LITTLE_CACHE_SANITIZER} -fno-omit-frame-pointer)
+    target_link_options   (runUnitTests PRIVATE -fsanitize=${LITTLE_CACHE_SANITIZER})
+endif()
 
-################################
-# GTest
-################################
-enable_testing()
-
-
-################################
-# Unit Tests
-################################
-file(GLOB_RECURSE SRCS *.cpp)
-
-# Add test cpp file
-add_executable( runUnitTests ${SRCS} )
-
-target_include_directories(runUnitTests PUBLIC ${INC_DIRS})
-target_link_libraries(runUnitTests ${LIBS})
-
-# Link test executable against gtest & gtest_main
-target_link_libraries(runUnitTests gtest gtest_main)
-add_test(runUnitTests runUnitTests )
-
-
+add_test(NAME runUnitTests COMMAND runUnitTests)
