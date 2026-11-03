@@ -30,6 +30,17 @@ std::shared_ptr<std::vector<char>> clean = little_cache<std::vector<char>, 0, li
 - `purge()` destroys the objects at rest. `numCachedItems()` counts them.
 - Every function is safe to call from any number of threads at once.
 
+## Things to know
+
+- **Memory stays allocated.** Up to 1024 objects per cache are kept at rest, however large they are, and they are
+  never destroyed, even at program exit (so a `shared_ptr` released during shutdown can still return its object
+  safely). Leak checkers report them as "still reachable", not as leaks. Call `purge()` to free them sooner.
+- **Recycled objects are not wiped.** `little_cache_clear` empties an object, but the old bytes are still in its
+  memory. Don't rely on it to erase secrets.
+- **Shared libraries.** If the library is built with hidden symbols (`-fvisibility=hidden`), each shared library
+  gets its own caches. An object must not outlive a shared library that is unloaded (`dlclose`) after handing it
+  out, since returning it runs code from that library.
+
 ## Using it
 
 Install it (`cmake -B build && cmake --install build`, or the Debian package from `cpack`), then:
