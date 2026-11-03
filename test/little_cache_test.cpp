@@ -20,8 +20,10 @@
 #include <complex>
 #include <iostream>
 #include <atomic>
+#include <algorithm>
 #include <memory>
 #include <thread>
+#include <type_traits>
 #include <vector>
 
 #include "gtest/gtest.h"
@@ -192,4 +194,82 @@ TEST(LittleCache, TestManyThreadsAtOnce) {
 
     little_cache<Counted, 2>::purge();
     EXPECT_EQ(before, Counted::alive);
+}
+
+namespace {
+/// A custom reset policy: zero every element, but keep the size.
+struct ZeroFill {
+    void operator()(std::vector<int>& item) const noexcept {
+        std::fill(item.begin(), item.end(), 0);
+    }
+};
+
+/// Counts how often it is called.
+struct CountResets {
+    static inline std::atomic<int> calls{0};
+    void operator()(Counted& /*item*/) const noexcept {
+        calls++;
+    }
+};
+}
+
+TEST(LittleCache, TestKeepIsTheDefaultPolicy) {
+    EXPECT_TRUE((std::is_same_v<little_cache<ITEM_TYPE>, little_cache<ITEM_TYPE, 0, little_cache_keep> >));
+}
+
+TEST(LittleCache, TestClearPolicyEmptiesReturnedItems) {
+    little_cache<std::vector<int>, 0, little_cache_clear>::purge();
+    {
+        std::shared_ptr<std::vector<int> > item = little_cache<std::vector<int>, 0, little_cache_clear>::get();
+        item->reserve(100);
+        item->assign({1, 2, 3});
+    }
+    {
+        // The same object comes back empty, but still has its memory.
+        std::shared_ptr<std::vector<int> > item = little_cache<std::vector<int>, 0, little_cache_clear>::get();
+        EXPECT_TRUE(item->empty());
+        EXPECT_GE(item->capacity(), 100U);
+    }
+    little_cache<std::vector<int>, 0, little_cache_clear>::purge();
+}
+
+TEST(LittleCache, TestCustomPolicy) {
+    little_cache<std::vector<int>, 0, ZeroFill>::purge();
+    {
+        std::shared_ptr<std::vector<int> > item = little_cache<std::vector<int>, 0, ZeroFill>::get();
+        item->assign({1, 2, 3});
+    }
+    {
+        std::shared_ptr<std::vector<int> > item = little_cache<std::vector<int>, 0, ZeroFill>::get();
+        EXPECT_EQ((std::vector<int>{0, 0, 0}), *item);
+    }
+    little_cache<std::vector<int>, 0, ZeroFill>::purge();
+}
+
+TEST(LittleCache, TestPolicyRunsOnEveryReturnEvenWhenFull) {
+    little_cache<Counted, 0, CountResets>::purge();
+    const int         before = CountResets::calls;
+    const std::size_t limit  = little_cache<Counted, 0, CountResets>::MAX_CACHED_ITEMS;
+    {
+        std::vector<std::shared_ptr<Counted> > items;
+        for (std::size_t i = 0; i < limit + 5; i++) {
+            items.push_back(little_cache<Counted, 0, CountResets>::get());
+        }
+    }
+    // Reset before being cached, and before being deleted because the cache was full.
+    EXPECT_EQ(before + static_cast<int>(limit) + 5, CountResets::calls);
+    little_cache<Counted, 0, CountResets>::purge();
+}
+
+TEST(LittleCache, TestPoliciesAreSeparateCaches) {
+    little_cache<std::vector<int>, 0, little_cache_keep>::purge();
+    little_cache<std::vector<int>, 0, little_cache_clear>::purge();
+    {
+        std::shared_ptr<std::vector<int> > item = little_cache<std::vector<int>, 0, little_cache_clear>::get();
+    }
+    const std::size_t kept    = little_cache<std::vector<int>, 0, little_cache_keep>::numCachedItems();
+    const std::size_t cleared = little_cache<std::vector<int>, 0, little_cache_clear>::numCachedItems();
+    EXPECT_EQ(0U, kept);
+    EXPECT_EQ(1U, cleared);
+    little_cache<std::vector<int>, 0, little_cache_clear>::purge();
 }
